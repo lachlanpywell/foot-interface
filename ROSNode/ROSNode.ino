@@ -36,6 +36,7 @@ const int SHARED_CONTROL_PIN = A10;
 // DECLARE AND INITIALISE GLOBAL VARIABLES
 int rollAVal = 0;
 int rollBVal = 0;
+int sharedControlVal = 0;
 float cmdArrayFloat[5] = {
   0,
   0,
@@ -43,6 +44,10 @@ float cmdArrayFloat[5] = {
   0,
   0,
 };
+bool sharedControlMode = false; // false = shared control OFF
+bool sharedControlCurrState = false;
+bool sharedControlPrevState = false;
+
 // ------------------- //
 // SETUP
 // ------------------- //
@@ -61,7 +66,7 @@ void setup() {
 // LOOP
 // ------------------- //
 void loop() {
-  
+
   // ------------------- //
   // ROLL
   // ------------------- //
@@ -91,12 +96,22 @@ void loop() {
     cmdArrayFloat[ROS_ROLL] = 0;
   }
 
-  if (!ROS_MODE) {
-    
-    Serial.print(rollAVal);
-    Serial.print(" , ");
-    Serial.print(rollBVal);
-    Serial.print(" , ");
-    Serial.println(cmdArrayFloat[ROS_ROLL]);
+  // ------------------- //
+  // SHARED CONTROL
+  // ------------------- //
+  // Read shared control hall effect sensor
+  sharedControlVal = analogRead(SHARED_CONTROL_PIN);
+
+  if (sharedControlVal > SHARED_CONTROL_ACTIVATE) {
+    sharedControlCurrState = true;
+  } else {
+    sharedControlCurrState = false;
   }
+
+  if (sharedControlCurrState && !sharedControlPrevState) {
+    sharedControlMode = !sharedControlMode ;   // not currently written to ROS topic
+  }
+
+  sharedControlPrevState = sharedControlCurrState;
+
 }
