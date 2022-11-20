@@ -10,7 +10,7 @@
 // 4: Spare
 // Shared Control state is computed but not currently written to the topic
 
-bool ROS_MODE = false;  // false = Serial, true = ROS
+bool ROS_MODE = true;  // false = Serial, true = ROS
 std_msgs::Float64MultiArray cmdMsgArrayFloat;
 ros::Publisher FootInterface("interface_cmd", &cmdMsgArrayFloat);
 ros::NodeHandle nh;
@@ -19,7 +19,7 @@ ros::NodeHandle nh;
 const int ROLL_THRESHOLD_SLOW = 350;
 const int ROLL_THRESHOLD_FAST = 480;
 const int SHARED_CONTROL_ACTIVATE = 300;
-const float ROTATION_SPEED_INCREMENT = 0.00005;
+const float ROTATION_SPEED_INCREMENT = 0.00002;
 const float MIN_SPEED_ROTATION = 0.02;
 const float MAX_SPEED_ROTATION = 0.04;
 
@@ -44,9 +44,12 @@ float cmdArrayFloat[5] = {
   0,
   0,
 };
-bool sharedControlMode = false; // false = shared control OFF
+bool sharedControlMode = false;  // false = shared control OFF
 bool sharedControlCurrState = false;
 bool sharedControlPrevState = false;
+long currTimeROS = 0;
+long prevTimeROS = 0;
+char tempROSLogging[20];
 
 // ------------------- //
 // SETUP
@@ -109,9 +112,32 @@ void loop() {
   }
 
   if (sharedControlCurrState && !sharedControlPrevState) {
-    sharedControlMode = !sharedControlMode ;   // not currently written to ROS topic
+    sharedControlMode = !sharedControlMode;  // not currently written to ROS topic
   }
 
   sharedControlPrevState = sharedControlCurrState;
 
+  // ------------------- //
+  // ROS
+  // ------------------- //
+  currTimeROS = millis();
+  if (currTimeROS - prevTimeROS > 100) {
+
+    if (ROS_MODE) {
+      cmdMsgArrayFloat.data = cmdArrayFloat;
+      cmdMsgArrayFloat.data_length = 5;
+      FootInterface.publish(&cmdMsgArrayFloat);
+      nh.spinOnce();
+    }
+    prevTimeROS = currTimeROS;
+  }
+
+  delay(1);  // for analog read stability
 }
+
+
+
+
+// DEBUGGING (write ROS log message)
+// itoa(rollAVal, tempROSLogging, 10);
+// nh.loginfo(tempROSLogging);
