@@ -7,7 +7,7 @@
 // 1: In/Out (Insertion, Withdrawal)
 // 2: Pitch (Forward, Backward)
 // 3: Yaw (Left, Right)
-// 4: Spare
+// 4: Spare (always zero)
 // Shared Control state is computed but not currently written to the topic
 
 bool ROS_MODE = true;  // false = Serial, true = ROS
@@ -16,6 +16,7 @@ ros::Publisher FootInterface("interface_cmd", &cmdMsgArrayFloat);
 ros::NodeHandle nh;
 
 // CONSTANTS
+// Hall Effect Sensors
 const int ROLL_THRESHOLD_SLOW = 350;
 const int ROLL_THRESHOLD_FAST = 480;
 const int SHARED_CONTROL_ACTIVATE = 300;
@@ -23,7 +24,16 @@ const float ROTATION_SPEED_INCREMENT = 0.00002;
 const float MIN_SPEED_ROTATION = 0.02;
 const float MAX_SPEED_ROTATION = 0.04;
 
-const int ROS_ROLL = 0;  // Array indices
+// Pressure Sensors
+const int FSR_SLOW_THRESHOLD = 100;
+const int FSR_FAST_THRESHOLD = 25;
+const int MIN_TAP_TIME = 50;
+const int MAX_TAP_TIME = 1700;
+const float MIN_SPEED_INOUT = 0.002;
+const float MAX_SPEED_INOUT = 0.007;
+
+// Array indices
+const int ROS_ROLL = 0;
 const int ROS_INOUT = 1;
 const int ROS_PITCH = 2;
 const int ROS_YAW = 3;
@@ -32,6 +42,12 @@ const int ROS_YAW = 3;
 const int ROLL_A_PIN = A8;
 const int ROLL_B_PIN = A9;
 const int SHARED_CONTROL_PIN = A10;
+const int FSR_0_PIN = A0;
+const int FSR_1_PIN = A1;
+const int FSR_2_PIN = A2;
+const int FSR_3_PIN = A3;
+const int FSR_4_PIN = A4;
+const int FSR_5_PIN = A5;
 
 // DECLARE AND INITIALISE GLOBAL VARIABLES
 int rollAVal = 0;
@@ -50,6 +66,34 @@ bool sharedControlPrevState = false;
 long currTimeROS = 0;
 long prevTimeROS = 0;
 char tempROSLogging[20];
+
+int insertionPressure = 0;
+int withdrawalPressure = 0;
+int temp1 = 0;
+int temp2 = 0;
+int temp3 = 0;
+float insertionSpeed = 0.0;
+float withdrawalSpeed = 0.0;
+bool prevStateIns = false;
+bool prevStateWith = false;
+bool currStateIns = false;
+bool currStateWith = false;
+bool insertionStopped = false;
+bool withdrawalStopped = false;
+
+bool footLifted = false;
+
+int countTapIns = 0;
+int countTapWith = 0;
+
+long timeAIns = 0;
+long timeAWith = 0;
+long timeLastIns = 0;
+long timeLastWith = 0;
+long startTimeIns = 0;
+long startTimeWith = 0;
+
+
 
 // ------------------- //
 // SETUP
@@ -90,14 +134,54 @@ void loop() {
 
   // Roll B
   else if (rollBVal > ROLL_THRESHOLD_FAST) {
+    // ramp to max speed
     if (cmdArrayFloat[ROS_ROLL] > -MAX_SPEED_ROTATION) {
       cmdArrayFloat[ROS_ROLL] -= ROTATION_SPEED_INCREMENT;
     }
   } else if (rollBVal > ROLL_THRESHOLD_SLOW) {
     cmdArrayFloat[ROS_ROLL] = -MIN_SPEED_ROTATION;
-  } else {
+  }  else {
+    // if both sensors not pressed
     cmdArrayFloat[ROS_ROLL] = 0;
   }
+
+
+  // ------------------- //
+  // INSERTION
+  // ------------------- //
+  // Read Sensor Values
+  temp1 = analogRead(FSR_0_PIN);
+  temp2 = analogRead(FSR_1_PIN);
+  temp3 = analogRead(FSR_2_PIN);
+  insertionPressure = (temp1 + temp2 + temp3) / 3; // average pressure sensor readings
+
+  temp1 = analogRead(FSR_3_PIN);
+  temp2 = analogRead(FSR_4_PIN);
+  temp3 = analogRead(FSR_5_PIN);
+  withdrawalPressure = (temp1 + temp2 + temp3) / 3; // average pressure sensor readings
+  
+  pressureStates(insertionPressure, currStateIns);
+  pressureStates(withdrawalPressure, currStateWith);
+
+  // Detect if the foot is lifted off the pedal
+  if (withdrawalPressure < FSR_SLOW_THRESHOLD && insertionPressure < FSR_SLOW_THRESHOLD) {
+    footLifted = true;
+  } else {
+    footLifted = false;
+  }
+  
+  doubleTapCount(insertionPressure, withdrawalPressure, currStateIns, currStateWith, prevStateIns, prevStateWith, countTapIns, startTimeIns, timeLastIns, timeAIns, insertionStopped);
+  insertionSpeed = doubleTapSpeed(countTapIns, insertionPressure, withdrawalPressure);
+//  Serial.print(countTapIns);
+//  Serial.print(" , ");
+  Serial.print(insertionSpeed,4);
+  
+  //  temp1 = doubleTapSpeed(insertionPressure, withdrawalPressure, ... , ...);
+  //  temp2 =;
+  //  cmdArrayFloat[ROS_INOUT] = abs(temp1) > abs(temp2) ? temp1 : temp2;
+  prevStateIns = currStateIns;
+  prevStateWith = prevStateWith;
+
 
   // ------------------- //
   // SHARED CONTROL
@@ -118,7 +202,7 @@ void loop() {
   sharedControlPrevState = sharedControlCurrState;
 
   // ------------------- //
-  // ROS
+  // PUBLISH ROS TOPIC
   // ------------------- //
   currTimeROS = millis();
   if (currTimeROS - prevTimeROS > 100) {
@@ -135,8 +219,90 @@ void loop() {
   delay(1);  // for analog read stability
 }
 
+// ------------------- //
+// INSERTION/WITHDRAWAL
+// ------------------- //
+void pressureStates(int pressureVal, bool &currState) {
+  // Check values against threshold
+  if (pressureVal < FSR_SLOW_THRESHOLD) {
+    currState = false;
+  } else {
+    currState = true;
+  }
+}
 
+void doubleTapCount(int insertionPressure, int withdrawalPressure, bool currStateA, bool currStateB, bool prevStateA, bool prevStateB, int &countTap, long &startTime, long &timeLast, long &timeA, bool &latchCommand) {
 
+  // Record State Change Times (when sensor detects foot lift or tap on insertion/withdrawal sensors)
+  if ((currStateA != prevStateA) && currStateB) {
+    if (countTap == 0 && !currStateA) {
+      startTime = millis();
+      countTap += 1;
+      timeLast = startTime;
+//    } else if ((footLifted || latchCommand) && currStateA) {
+      } else if ((footLifted) && currStateA){
+      countTap = 0;
+//      latchCommand = false;
+    } else if (countTap > 0) {
+      timeA = millis();
+
+      if (abs(timeA - timeLast) > MIN_TAP_TIME) {
+        countTap += 1;
+      }
+      if (abs(timeA - startTime) > MAX_TAP_TIME) {
+        countTap = 1;
+        startTime = timeA;
+      }
+      timeLast = timeA;
+    }
+//    Serial.print(currStateA);
+//    Serial.print(" , ");
+//    Serial.print(currStateB);
+//    Serial.print(" , ");
+//    Serial.print(prevStateA);
+//    Serial.print(" , Count: ");
+//    Serial.print(countTap);
+//    Serial.print(" , Start Time: ");
+//    Serial.print(startTime);
+//    Serial.print(" , Time Last: ");
+//    Serial.print(timeLast);
+//    Serial.print(" , Time A: ");
+//    Serial.println(timeA);
+  }
+  //  Serial.print(0);
+  //  Serial.print(",");
+  //Serial.print(1023);
+  //  Serial.print(",");
+  //  Serial.print(insertionPressure);
+  //  Serial.print(",");
+  //  Serial.print(withdrawalPressure);
+  //  Serial.print(",");
+
+}
+
+float doubleTapSpeed(int &countTap, int pressureA, int pressureB){
+  float output = 0.0;
+  if(countTap==4){
+//    Serial.println("---");
+    Serial.print(pressureA);
+    Serial.print(" , ");
+    Serial.println(pressureB);
+//    Serial.println("---");
+    if(pressureA > FSR_SLOW_THRESHOLD){
+      if(pressureB < FSR_FAST_THRESHOLD){
+        output = MAX_SPEED_INOUT;
+      }else{
+        output = MIN_SPEED_INOUT;
+      }
+    }else{
+//      commandActive = false;
+    }
+  }else{
+//    commandActive = false;
+  }
+
+  return output;
+}
 
 // DEBUGGING (write ROS log message)
 // itoa(rollAVal, tempROSLogging, 10);
