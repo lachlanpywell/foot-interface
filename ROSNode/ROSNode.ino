@@ -31,6 +31,7 @@ const int MIN_TAP_TIME = 50;
 const int MAX_TAP_TIME = 1700;
 const float MIN_SPEED_INOUT = 0.002;
 const float MAX_SPEED_INOUT = 0.007;
+const float INOUT_SPEED_INCREMENT = 0.00001;
 
 // Array indices
 const int ROS_ROLL = 0;
@@ -159,7 +160,7 @@ void loop() {
   temp2 = analogRead(FSR_4_PIN);
   temp3 = analogRead(FSR_5_PIN);
   withdrawalPressure = (temp1 + temp2 + temp3) / 3; // average pressure sensor readings
-  
+
   pressureStates(insertionPressure, currStateIns);
   pressureStates(withdrawalPressure, currStateWith);
 
@@ -169,18 +170,23 @@ void loop() {
   } else {
     footLifted = false;
   }
+
+  // Insertion
+  doubleTapCount(currStateIns, currStateWith, prevStateIns, prevStateWith, countTapIns, startTimeIns, timeLastIns, timeAIns);
+  insertionSpeed = doubleTapSpeed(countTapIns, insertionPressure, withdrawalPressure, 1);
+
+  // Withdrawal
+  doubleTapCount(currStateWith, currStateIns, prevStateWith, prevStateIns, countTapWith, startTimeWith, timeLastWith, timeAWith);
+  withdrawalSpeed = doubleTapSpeed(countTapWith, withdrawalPressure, insertionPressure, -1);
+
   
-  doubleTapCount(insertionPressure, withdrawalPressure, currStateIns, currStateWith, prevStateIns, prevStateWith, countTapIns, startTimeIns, timeLastIns, timeAIns, insertionStopped);
-  insertionSpeed = doubleTapSpeed(countTapIns, insertionPressure, withdrawalPressure);
-//  Serial.print(countTapIns);
-//  Serial.print(" , ");
-  Serial.print(insertionSpeed,4);
-  
-  //  temp1 = doubleTapSpeed(insertionPressure, withdrawalPressure, ... , ...);
-  //  temp2 =;
-  //  cmdArrayFloat[ROS_INOUT] = abs(temp1) > abs(temp2) ? temp1 : temp2;
+  cmdArrayFloat[ROS_INOUT] = insertionSpeed > abs(withdrawalSpeed) ? insertionSpeed : withdrawalSpeed;
+  Serial.print(countTapWith);
+  Serial.print(" , ");
+  Serial.println(cmdArrayFloat[ROS_INOUT], 4);
+
   prevStateIns = currStateIns;
-  prevStateWith = prevStateWith;
+  prevStateWith = currStateWith;
 
 
   // ------------------- //
@@ -231,7 +237,7 @@ void pressureStates(int pressureVal, bool &currState) {
   }
 }
 
-void doubleTapCount(int insertionPressure, int withdrawalPressure, bool currStateA, bool currStateB, bool prevStateA, bool prevStateB, int &countTap, long &startTime, long &timeLast, long &timeA, bool &latchCommand) {
+void doubleTapCount(bool currStateA, bool currStateB, bool prevStateA, bool prevStateB, int &countTap, long &startTime, long &timeLast, long &timeA) {
 
   // Record State Change Times (when sensor detects foot lift or tap on insertion/withdrawal sensors)
   if ((currStateA != prevStateA) && currStateB) {
@@ -239,10 +245,9 @@ void doubleTapCount(int insertionPressure, int withdrawalPressure, bool currStat
       startTime = millis();
       countTap += 1;
       timeLast = startTime;
-//    } else if ((footLifted || latchCommand) && currStateA) {
-      } else if ((footLifted) && currStateA){
+    } else if ((footLifted) && currStateA) {
       countTap = 0;
-//      latchCommand = false;
+      //      latchCommand = false;
     } else if (countTap > 0) {
       timeA = millis();
 
@@ -255,50 +260,30 @@ void doubleTapCount(int insertionPressure, int withdrawalPressure, bool currStat
       }
       timeLast = timeA;
     }
-//    Serial.print(currStateA);
-//    Serial.print(" , ");
-//    Serial.print(currStateB);
-//    Serial.print(" , ");
-//    Serial.print(prevStateA);
-//    Serial.print(" , Count: ");
-//    Serial.print(countTap);
-//    Serial.print(" , Start Time: ");
-//    Serial.print(startTime);
-//    Serial.print(" , Time Last: ");
-//    Serial.print(timeLast);
-//    Serial.print(" , Time A: ");
-//    Serial.println(timeA);
-  }
-  //  Serial.print(0);
-  //  Serial.print(",");
-  //Serial.print(1023);
-  //  Serial.print(",");
-  //  Serial.print(insertionPressure);
-  //  Serial.print(",");
-  //  Serial.print(withdrawalPressure);
-  //  Serial.print(",");
 
+  }
 }
 
-float doubleTapSpeed(int &countTap, int pressureA, int pressureB){
+// Calculate if the insertion/withdrawal command is the low, high or off speed.
+float doubleTapSpeed(int &countTap, int pressureA, int pressureB, int dir) {
   float output = 0.0;
-  if(countTap==4){
-//    Serial.println("---");
-    Serial.print(pressureA);
-    Serial.print(" , ");
-    Serial.println(pressureB);
-//    Serial.println("---");
-    if(pressureA > FSR_SLOW_THRESHOLD){
-      if(pressureB < FSR_FAST_THRESHOLD){
-        output = MAX_SPEED_INOUT;
-      }else{
-        output = MIN_SPEED_INOUT;
+  if (countTap == 4) {
+    if (pressureA > FSR_SLOW_THRESHOLD) {
+      if (pressureB < FSR_FAST_THRESHOLD) {
+        if (cmdArrayFloat[ROS_INOUT]*dir < MAX_SPEED_INOUT) {
+          output = cmdArrayFloat[ROS_INOUT] + INOUT_SPEED_INCREMENT * dir;
+        }
+        else {
+          output = cmdArrayFloat[ROS_INOUT];
+        }
+      } else {
+        output = MIN_SPEED_INOUT * dir;
       }
-    }else{
-//      commandActive = false;
     }
-  }else{
-//    commandActive = false;
+//  if (cmdArrayFloat[ROS_ROLL] > -MAX_SPEED_ROTATION) {
+//      cmdArrayFloat[ROS_ROLL] -= ROTATION_SPEED_INCREMENT;
+//    }
+    
   }
 
   return output;
