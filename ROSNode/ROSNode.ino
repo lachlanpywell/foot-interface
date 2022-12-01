@@ -178,11 +178,10 @@ void loop() {
   // Withdrawal
   doubleTapCount(currStateWith, currStateIns, prevStateWith, prevStateIns, countTapWith, startTimeWith, timeLastWith, timeAWith);
   withdrawalSpeed = doubleTapSpeed(countTapWith, withdrawalPressure, insertionPressure, -1);
-
   
   cmdArrayFloat[ROS_INOUT] = insertionSpeed > abs(withdrawalSpeed) ? insertionSpeed : withdrawalSpeed;
-  Serial.print(countTapWith);
-  Serial.print(" , ");
+//  Serial.print(countTapWith);
+//  Serial.print(" , ");
   Serial.println(cmdArrayFloat[ROS_INOUT], 4);
 
   prevStateIns = currStateIns;
