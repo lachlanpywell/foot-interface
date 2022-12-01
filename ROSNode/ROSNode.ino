@@ -1,6 +1,8 @@
 #include <ros.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <string.h>
+#include <ACE128.h>
+#include <ACE128map12345678.h>
 
 // ROS ARRAY ELEMENTS
 // 0: Rotation (Roll A, Roll B)
@@ -14,6 +16,9 @@ bool ROS_MODE = true;  // false = Serial, true = ROS
 std_msgs::Float64MultiArray cmdMsgArrayFloat;
 ros::Publisher FootInterface("interface_cmd", &cmdMsgArrayFloat);
 ros::NodeHandle nh;
+
+// Create Global Objects
+ACE128 myACE(36, 38, 40, 42, 28, 30, 32, 34, (uint8_t*)encoderMap_12345678);
 
 // CONSTANTS
 // Hall Effect Sensors
@@ -33,6 +38,12 @@ const float MIN_SPEED_INOUT = 0.002;
 const float MAX_SPEED_INOUT = 0.007;
 const float INOUT_SPEED_INCREMENT = 0.00001;
 
+// Encoders
+const int ENCODER_LR_FULL_SCALE = 1023;
+const int ENCODER_FB_FULL_SCALE = 128;
+const int ENCODER_LR_RANGE = 800; // i.e. 0-90 is the max revolution possible rotation of the gear
+const int ENCODER_FB_RANGE = 90;
+
 // Array indices
 const int ROS_ROLL = 0;
 const int ROS_INOUT = 1;
@@ -49,8 +60,16 @@ const int FSR_2_PIN = A2;
 const int FSR_3_PIN = A3;
 const int FSR_4_PIN = A4;
 const int FSR_5_PIN = A5;
+const int LIMIT_SWITCH_1_PIN = 14;
+const int LIMIT_SWITCH_2_PIN = 15;
+const int LIMIT_SWITCH_3_PIN = 16;
+const int LIMIT_SWITCH_4_PIN = 17;
+const int CS_PIN = 5;
+const int CLOCK_PIN = 6;
+const int DATA_PIN = 7;
 
 // DECLARE AND INITIALISE GLOBAL VARIABLES
+// Roll
 int rollAVal = 0;
 int rollBVal = 0;
 int sharedControlVal = 0;
@@ -68,6 +87,7 @@ long currTimeROS = 0;
 long prevTimeROS = 0;
 char tempROSLogging[20];
 
+// Insertion / Withdrawal
 int insertionPressure = 0;
 int withdrawalPressure = 0;
 int temp1 = 0;
@@ -81,12 +101,9 @@ bool currStateIns = false;
 bool currStateWith = false;
 bool insertionStopped = false;
 bool withdrawalStopped = false;
-
 bool footLifted = false;
-
 int countTapIns = 0;
 int countTapWith = 0;
-
 long timeAIns = 0;
 long timeAWith = 0;
 long timeLastIns = 0;
@@ -94,6 +111,20 @@ long timeLastWith = 0;
 long startTimeIns = 0;
 long startTimeWith = 0;
 
+// Encoders
+int limitSwitch1State = true;
+int limitSwitch2State = true;
+int limitSwitch3State = true;
+int limitSwitch4State = true;
+int encoderValFB = 0; // forward back 0-127
+int encoderValLR = 0; // left right 0-1023
+int encoderValMappedLR = 0;
+int encoderValMappedFB = 0;
+int encoderValPrevLR = 0;
+int encoderValPrevFB = 0;
+bool encoderCalibrationMode = false;
+int encoderLimitSwitchLR = 0;
+int encoderLimitSwitchFB = 0;
 
 
 // ------------------- //
@@ -108,6 +139,17 @@ void setup() {
   } else {
     Serial.begin(57600);
   }
+
+  pinMode(LIMIT_SWITCH_1_PIN, INPUT_PULLUP );
+  pinMode(LIMIT_SWITCH_2_PIN, INPUT_PULLUP );
+  pinMode(LIMIT_SWITCH_3_PIN, INPUT_PULLUP );
+  pinMode(LIMIT_SWITCH_4_PIN, INPUT_PULLUP );
+  myACE.begin();
+  pinMode(CS_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+  pinMode(DATA_PIN, INPUT);
+  digitalWrite(CLOCK_PIN, HIGH);
+  digitalWrite(CS_PIN, LOW);
 }
 
 // ------------------- //
@@ -178,16 +220,72 @@ void loop() {
   // Withdrawal
   doubleTapCount(currStateWith, currStateIns, prevStateWith, prevStateIns, countTapWith, startTimeWith, timeLastWith, timeAWith);
   withdrawalSpeed = doubleTapSpeed(countTapWith, withdrawalPressure, insertionPressure, -1);
-  
+
   cmdArrayFloat[ROS_INOUT] = insertionSpeed > abs(withdrawalSpeed) ? insertionSpeed : withdrawalSpeed;
-//  Serial.print(countTapWith);
-//  Serial.print(" , ");
-  Serial.println(cmdArrayFloat[ROS_INOUT], 4);
+  //  Serial.print(countTapWith);
+  //  Serial.print(" , ");
+//  Serial.println(cmdArrayFloat[ROS_INOUT], 4);
 
   prevStateIns = currStateIns;
   prevStateWith = currStateWith;
 
 
+  // ------------------- //
+  // PITCH
+  // ------------------- //
+  if (encoderCalibrationMode) {
+
+    encoderLimitSwitchFB = 22; // TO DO
+
+  }
+  else {
+    limitSwitch1State = digitalRead(LIMIT_SWITCH_1_PIN);
+    limitSwitch2State = digitalRead(LIMIT_SWITCH_2_PIN);
+    encoderValFB = myACE.rawPos();
+    encoderValMappedFB = encoderMapping(encoderValFB, limitSwitch1State, limitSwitch2State, encoderLimitSwitchFB , ENCODER_FB_FULL_SCALE, ENCODER_FB_RANGE);
+  }
+
+
+  // ------------------- //
+  // YAW
+  // ------------------- //
+  if (encoderCalibrationMode) {
+
+    encoderLimitSwitchLR = 22; // TO DO
+
+  }
+  else {
+    limitSwitch3State = digitalRead(LIMIT_SWITCH_3_PIN);
+    limitSwitch4State = digitalRead(LIMIT_SWITCH_4_PIN);
+    digitalWrite(CS_PIN, HIGH);
+    digitalWrite(CS_PIN, LOW);
+    encoderValLR = 0;
+
+    for (int i = 0; i < 16; i++) {
+      digitalWrite(CLOCK_PIN, LOW);
+      digitalWrite(CLOCK_PIN, HIGH);
+      byte b = digitalRead(DATA_PIN) == HIGH ? 1 : 0;
+      encoderValLR += b * pow(2, 10 - (i + 1));
+    }
+
+    // Status bits, not written or read
+    for (int i = 0; i < 6; i++) {
+      digitalWrite(CLOCK_PIN, LOW);
+      digitalWrite(CLOCK_PIN, HIGH);
+    }
+
+    digitalWrite(CLOCK_PIN, LOW);
+    digitalWrite(CLOCK_PIN, HIGH);
+
+    encoderValMappedLR = encoderMapping(encoderValLR, limitSwitch3State, limitSwitch4State, encoderLimitSwitchLR, ENCODER_LR_FULL_SCALE, ENCODER_LR_RANGE);
+  }
+
+  itoa(encoderValMappedLR, tempROSLogging, 10);
+  nh.loginfo(tempROSLogging);
+  
+  itoa(encoderValMappedFB, tempROSLogging, 10);
+  nh.loginfo(tempROSLogging);
+  
   // ------------------- //
   // SHARED CONTROL
   // ------------------- //
@@ -279,10 +377,30 @@ float doubleTapSpeed(int &countTap, int pressureA, int pressureB, int dir) {
         output = MIN_SPEED_INOUT * dir;
       }
     }
-//  if (cmdArrayFloat[ROS_ROLL] > -MAX_SPEED_ROTATION) {
-//      cmdArrayFloat[ROS_ROLL] -= ROTATION_SPEED_INCREMENT;
-//    }
-    
+    //  if (cmdArrayFloat[ROS_ROLL] > -MAX_SPEED_ROTATION) {
+    //      cmdArrayFloat[ROS_ROLL] -= ROTATION_SPEED_INCREMENT;
+    //    }
+
+  }
+
+  return output;
+}
+
+// Map the encoder raw/absolute value to 0 - Full Scale (i.e. all the way to one end will read zero)
+int encoderMapping(int rawVal, bool limitSwitch1, bool limitSwitch2, int limitSwitchZero, int ENCODER_FULL_SCALE, int FULL_RANGE) {
+  int output = 0;
+
+  if (rawVal < limitSwitchZero) {
+    output = ENCODER_FULL_SCALE - limitSwitchZero + rawVal;
+  } else {
+    output = rawVal - limitSwitchZero;
+  }
+
+  // Clamp encoder val to min/max if limit switch active
+  if (!limitSwitch1) {
+    output = 0;
+  } else if (!limitSwitch2) {
+    output = FULL_RANGE;
   }
 
   return output;
