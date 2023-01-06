@@ -83,8 +83,8 @@ $ rostopic echo /interface_cmd
 
 ## Remaining Items
 + Paint (powder coat) steel 'pedal' plate
-+ Drill 2 x 2.2mm in overhanging steel plate for limit switch mounting
-+ Reprint (if resolving the clearance hole issues is inadequate - redesign) and assemble
++ Drill 2 x 2.2mm hole in overhanging steel plate for limit switch mounting
++ Reprint SEA (if resolving the clearance hole issues is inadequate - redesign if the print does not return to the same equilibrium when the springs are exactly the same length) and assemble
 + Mount force sensing resistors, attach 'pedal' to linear guide blocks and cover with rubber adhesive mat
 + Mount encoders, motors and cantilevered gear rack
 + Program vibration motors, LED and switch (the vibration motors are powered by AA batteries and controlled using Arduino digital pins via a MOSFET).
