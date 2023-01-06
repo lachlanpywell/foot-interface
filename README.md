@@ -87,4 +87,5 @@ $ rostopic echo /interface_cmd
 + Reprint (if resolving the clearance hole issues is inadequate - redesign) and assemble
 + Mount force sensing resistors, attach 'pedal' to linear guide blocks and cover with rubber adhesive mat
 + Mount encoders, motors and cantilevered gear rack
++ Program vibration motors, LED and switch (the vibration motors are powered by AA batteries and controlled using Arduino digital pins via a MOSFET).
 + Program stepper motors (recommend using the AccelStepper library, there is multicore wire to be used for wiring the motors to the driver and Arduino. Each driver should be wired to a separate input on the power supply. The driver can be wired in a common anode configuration, that is the enable pins are left floating, PUL+ and DIR+ wired to 5V and PUL- and DIR- wired to Arduino digital pins. Also ensure the dip switch current limit (2.7A) and microstep (recommend 400 pulse/rev due to the significant decline in holding torque beyond this, see https://www.machinedesign.com/archive/article/21812154/microstepping-myths). 
