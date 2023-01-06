@@ -82,10 +82,8 @@ $ rostopic echo /interface_cmd
 ```
 
 ## Remaining Items
--Paint (powder coat) steel 'pedal' plate
-
--Drill 2 x 2.2mm in overhanging steel plate for limit switch mounting
-
--Reprint (if resolving the clearance hole issues is inadequate - redesign) and assemble
--Mount force sensing resistors, attach 'pedal' to linear guide blocks and cover with rubber adhesive mat
--Mount encoders, motors and cantilevered gear rack
++ Paint (powder coat) steel 'pedal' plate
++ Drill 2 x 2.2mm in overhanging steel plate for limit switch mounting
++ Reprint (if resolving the clearance hole issues is inadequate - redesign) and assemble
++ Mount force sensing resistors, attach 'pedal' to linear guide blocks and cover with rubber adhesive mat
++ Mount encoders, motors and cantilevered gear rack
