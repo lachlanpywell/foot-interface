@@ -67,8 +67,11 @@ Refer to the renders folder.
 
 ## Control Philosophy
 *Insertion/withdrawal* movements are actuated via a douple tap of the ball and heel of the foot respectively. The movement is tracked using three force sensing resistors on each side of the foot, with the average reading at each end calculated and used to determine the active command. The command is maintained whilst the the pressure remains depressed from the second tap. To activate the faster speed lift the opposite side of the foot whilst the other side remains in contact with the sensor. 
+
 *Roll* movements are actuated by depressing the rubber lined steel plate. This movement is tracked using hall effect sensors. 
+
 *Shared control* mode (future works) - a hall effect sensor has been wired and configured to act as a toggle switch to enable/disable shared control. 
+
 *Pitch and Yaw* movements are mechanically actuated by sliding the pedal on the linear guide rails. Movements are tracked using rotary encoders. Variable force feedback, locking and self-centering is intended to be provided using stepper motors, coupled through a series elastic actuator and driving a gear rack and pinion system. 
 
 ## Steps to run the node
@@ -80,7 +83,9 @@ $ rostopic echo /interface_cmd
 
 ## Remaining Items
 -Paint (powder coat) steel 'pedal' plate
+
 -Drill 2 x 2.2mm in overhanging steel plate for limit switch mounting
+
 -Reprint (if resolving the clearance hole issues is inadequate - redesign) and assemble
 -Mount force sensing resistors, attach 'pedal' to linear guide blocks and cover with rubber adhesive mat
 -Mount encoders, motors and cantilevered gear rack
