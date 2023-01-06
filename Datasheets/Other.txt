@@ -1,0 +1,4 @@
+Stepper Motor: https://www.makerstore.com.au/product/elec-nema23-635-b/
+Force sensing resistor: https://au.mouser.com/ProductDetail/DFRobot/SEN0293?qs=Zz7%252BYVVL6bHVsHYY5ojgKg%3D%3D
+SEA Bearing: MF105ZZ
+Hall effect sensor: note some of the hall effect sensors used were from previous FIs are a different model to the attached datasheet. These sensors have a 5V, GND and VOUT leg.

@@ -72,6 +72,7 @@ const int MIN_SPEED_YAW = 0.02;
 const int YAW_SPEED_INCREMENT = 0.00002;
 
 // Array indices
+// These can be changed to map foot movements to different camera movements
 const int ROS_ROLL = 0;
 const int ROS_INOUT = 1;
 const int ROS_PITCH = 2;
